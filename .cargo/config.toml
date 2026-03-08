@@ -1,0 +1,10 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+# 你可以按实际芯片后缀调整 chip 名称；probe-rs 支持 "STM32F446RETx" 这一类。
+runner = "probe-rs run --chip STM32F446RETx"
+rustflags = [
+  "-C", "link-arg=-Tlink.x",
+  "-C", "link-arg=-Tdefmt.x",
+]

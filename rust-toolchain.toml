@@ -1,0 +1,6 @@
+[toolchain]
+# Embassy 的 executor/async 在不少组合上仍依赖 nightly 特性；
+# 若你本地已验证 stable 可用，可把 channel 改为 "stable"。
+channel = "nightly"
+components = ["rust-src"]
+targets = ["thumbv7em-none-eabihf"]
