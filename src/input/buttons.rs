@@ -8,12 +8,34 @@
 //! - 周期扫描（不使用 EXTI）
 //! - 去抖：20ms
 
+//! ## 轮询式接口
+//! - 后台任务 [`buttons_task`] 周期扫描并维护全局稳定态快照。
+//! - 上层通过 [`latest`] 读取稳定态（而不是接收事件）。
+//!
+//! ## 去抖策略（最小实现）
+//! - 每个按键维护一个 `Debouncer`：
+//!   - `stable`：当前已确认的稳定状态
+//!   - `candidate`：正在尝试确认的新状态
+//!   - `count`：新状态连续出现的次数
+//! - 只有当 `candidate` 连续出现达到阈值（20ms）才更新 `stable`。
+
+//! ## Beginner Notes
+//! - 任务循环里用 `Timer::after_millis(...).await` 形成周期：这等价于“延时并让出 CPU”。
+//! - `Mutex` 里的值用 `Copy` 类型（小结构体）存放：读取/写入都是拷贝，避免借用生命周期难题。
+//! - 这里选择 `u8` 计数器：阈值很小（10），节省空间且足够。
+
+//! ## Reading Guide
+//! - 先看 [`ButtonsSnapshot`]：它是上层读到的“稳定态快照”。
+//! - 再看 [`latest`]：轮询接口。
+//! - 最后看 [`buttons_task`]：任务如何扫描 GPIO、如何用 `Debouncer` 做 20ms 去抖。
+
 use embassy_stm32::gpio::{Input, Pull};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
 #[allow(dead_code)]
+/// 按键 ID（预留：给未来协议/日志使用）。
 pub enum ButtonId {
     Button1,
     Button2,
@@ -23,6 +45,9 @@ pub enum ButtonId {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format)]
+/// 按键逻辑状态。
+///
+/// 说明：硬件为“低有效”，但在软件里统一转换为 Pressed/Released 逻辑态。
 pub enum ButtonState {
     Released,
     Pressed,
@@ -35,6 +60,9 @@ impl Default for ButtonState {
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, defmt::Format, Default)]
+/// 5 个按键的稳定态快照。
+///
+/// 字段命名与 `HARDWARE.md` 的按键表保持一致。
 pub struct ButtonsSnapshot {
     pub button1: ButtonState,
     pub button2: ButtonState,
@@ -52,6 +80,10 @@ static BUTTONS: Mutex<CriticalSectionRawMutex, ButtonsSnapshot> = Mutex::new(But
 });
 
 #[allow(dead_code)]
+/// 轮询读取按键“稳定态快照”。
+///
+/// - 如果后台任务尚未运行，初始值为全 Released。
+/// - 读取会短暂进入互斥区并返回结构体副本。
 pub async fn latest() -> ButtonsSnapshot {
     *BUTTONS.lock().await
 }
@@ -81,6 +113,9 @@ impl Debouncer {
     }
 
     fn update<const THRESHOLD: u8>(&mut self, sample: ButtonState) -> Option<ButtonState> {
+        // Rust 语法点：`const THRESHOLD: u8` 是“const generics”（常量泛型）。
+        // 可以把它类比成 C++ 模板参数：Debouncer::update<10>(...)。
+        // 好处是阈值在编译期常量化，逻辑分支更明确。
         if sample == self.stable {
             self.candidate = sample;
             self.count = 0;
@@ -105,6 +140,16 @@ impl Debouncer {
 }
 
 #[embassy_executor::task]
+/// 按键扫描 + 软件去抖后台任务。
+///
+/// # 周期与阈值
+/// - 扫描周期：2ms
+/// - 去抖时间：20ms
+/// - 阈值：`THRESHOLD = DEBOUNCE_MS / SCAN_PERIOD_MS = 10`
+///
+/// # GPIO 配置
+/// - `Pull::None`：因为硬件已做外部上拉
+/// - `is_low() == true` 表示按下（低有效）
 pub async fn buttons_task(
     button1: embassy_stm32::peripherals::PC0,
     button2: embassy_stm32::peripherals::PC1,
