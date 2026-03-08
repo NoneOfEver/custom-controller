@@ -11,7 +11,24 @@ bind_interrupts!(pub struct UartIrqs {
 	USART6 => usart::InterruptHandler<peripherals::USART6>;
 });
 
-pub async fn init(spawner: Spawner, p: embassy_stm32::Peripherals) {
+pub async fn init(
+	spawner: Spawner,
+	uart4: peripherals::UART4,
+	uart4_rx: peripherals::PA1,
+	uart4_rx_dma: peripherals::DMA1_CH2,
+	usart2: peripherals::USART2,
+	usart2_rx: peripherals::PA3,
+	usart2_rx_dma: peripherals::DMA1_CH5,
+	usart3: peripherals::USART3,
+	usart3_rx: peripherals::PC11,
+	usart3_rx_dma: peripherals::DMA1_CH1,
+	usart6: peripherals::USART6,
+	usart6_rx: peripherals::PC7,
+	usart6_rx_dma: peripherals::DMA2_CH1,
+	usart1: peripherals::USART1,
+	usart1_tx: peripherals::PA9,
+	usart1_tx_dma: peripherals::DMA2_CH7,
+) {
 	let mut cfg = usart::Config::default();
 	cfg.baudrate = 9_600;
 	cfg.data_bits = usart::DataBits::DataBits8;
@@ -19,10 +36,10 @@ pub async fn init(spawner: Spawner, p: embassy_stm32::Peripherals) {
 	cfg.parity = usart::Parity::ParityNone;
 
 	// 4 路传感器 UART RX：DMA + IDLE 分帧
-	let uart4_rx = usart::UartRx::new(p.UART4, UartIrqs, p.PA1, p.DMA1_CH2, cfg).unwrap();
-	let usart2_rx = usart::UartRx::new(p.USART2, UartIrqs, p.PA3, p.DMA1_CH5, cfg).unwrap();
-	let usart3_rx = usart::UartRx::new(p.USART3, UartIrqs, p.PC11, p.DMA1_CH1, cfg).unwrap();
-	let usart6_rx = usart::UartRx::new(p.USART6, UartIrqs, p.PC7, p.DMA2_CH1, cfg).unwrap();
+	let uart4_rx = usart::UartRx::new(uart4, UartIrqs, uart4_rx, uart4_rx_dma, cfg).unwrap();
+	let usart2_rx = usart::UartRx::new(usart2, UartIrqs, usart2_rx, usart2_rx_dma, cfg).unwrap();
+	let usart3_rx = usart::UartRx::new(usart3, UartIrqs, usart3_rx, usart3_rx_dma, cfg).unwrap();
+	let usart6_rx = usart::UartRx::new(usart6, UartIrqs, usart6_rx, usart6_rx_dma, cfg).unwrap();
 
 	spawner
 		.spawn(sensor_ports::sensor_rx_task(
@@ -50,5 +67,5 @@ pub async fn init(spawner: Spawner, p: embassy_stm32::Peripherals) {
 		.unwrap();
 
 	// 上位机链路：USART1 → RS485（TX-only）
-	host_tx::init(p.USART1, p.PA9, p.DMA2_CH7, cfg).await;
+	host_tx::init(usart1, usart1_tx, usart1_tx_dma, cfg).await;
 }
