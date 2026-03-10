@@ -17,6 +17,10 @@
 
 如果你来自 C/C++：建议按上述顺序读，每个模块顶部都有 `//!` 风格的“模块文档注释”。
 
+## 文档写作 SKILL（可复用）
+
+- 见 SKILL_DOCS.md：总结了 Rustdoc / Doxygen / Python docstring 的通用写法、模板与验收清单。
+
 ## Rust/Embassy 初学者提示（和 C++ 对照）
 
 - `#![no_std]` / `#![no_main]`：嵌入式固件通常不使用标准库（没有 OS/文件/堆等），入口由 `cortex-m-rt`/Embassy 提供。
